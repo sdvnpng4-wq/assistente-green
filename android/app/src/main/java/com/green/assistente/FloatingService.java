@@ -17,6 +17,7 @@ import android.content.Context;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
@@ -63,13 +64,12 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
 
     private void showBubble() {
         if (bubble != null) return;
-        TextView avatar = new TextView(this);
-        avatar.setText("🤖");
-        avatar.setTextSize(28);
-        avatar.setGravity(Gravity.CENTER);
-        avatar.setBackgroundColor(0xFF168A50);
+        ImageView avatar = new ImageView(this);
+        avatar.setImageResource(R.drawable.green_robot);
+        avatar.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        avatar.setContentDescription("Robô Green");
         bubble = avatar;
-        bubbleParams = new WindowManager.LayoutParams(64, 64, overlayType(),
+        bubbleParams = new WindowManager.LayoutParams(76, 76, overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         bubbleParams.gravity = Gravity.TOP | Gravity.START;
         bubbleParams.x = 20;
@@ -168,8 +168,9 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
                 310, WindowManager.LayoutParams.WRAP_CONTENT, overlayType(),
-                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+                0,
                 PixelFormat.TRANSLUCENT);
+        params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
         params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         params.y = 80;
         panel = box;
