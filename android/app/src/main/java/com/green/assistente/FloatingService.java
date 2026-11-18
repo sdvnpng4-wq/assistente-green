@@ -12,7 +12,12 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import java.util.Locale;
 
@@ -24,27 +29,29 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
     private WindowManager.LayoutParams bubbleParams;
     private TextToSpeech tts;
     private boolean ttsReady = false;
-    private String lastMessage = "Oi! Eu sou o Green. Pode compartilhar uma mensagem comigo para eu ler em voz alta.";
+    private TextView conversation;
+    private EditText commandInput;
+    private String lastMessage = "Oi! Eu sou o Green. Escreva um comando ou compartilhe uma mensagem comigo.";
 
-    @Override
-    public void onCreate() {
+    @Override public void onCreate() {
         super.onCreate();
         manager = (WindowManager) getSystemService(WINDOW_SERVICE);
         tts = new TextToSpeech(this, this);
         showBubble();
     }
 
-    @Override
-    public void onInit(int status) {
+    @Override public void onInit(int status) {
         if (status == TextToSpeech.SUCCESS) {
-            tts.setLanguage(new Locale("pt", "BR"));
-            ttsReady = true;
+            int language = tts.setLanguage(new Locale("pt", "BR"));
+            ttsReady = language != TextToSpeech.LANG_MISSING_DATA
+                    && language != TextToSpeech.LANG_NOT_SUPPORTED;
             speak("Oi! Eu sou o Green, seu robô assistente.");
         }
     }
 
     private void speak(String text) {
         lastMessage = text;
+        if (conversation != null) conversation.setText(text);
         if (ttsReady) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "green_speech");
     }
 
@@ -62,13 +69,11 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
         avatar.setGravity(Gravity.CENTER);
         avatar.setBackgroundColor(0xFF168A50);
         bubble = avatar;
-
         bubbleParams = new WindowManager.LayoutParams(64, 64, overlayType(),
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         bubbleParams.gravity = Gravity.TOP | Gravity.START;
         bubbleParams.x = 20;
         bubbleParams.y = 220;
-
         avatar.setOnTouchListener(new View.OnTouchListener() {
             private int startX, startY;
             private float downX, downY;
@@ -96,53 +101,104 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
         manager.addView(bubble, bubbleParams);
     }
 
+    private TextView text(String value, int size) {
+        TextView view = new TextView(this);
+        view.setText(value);
+        view.setTextColor(0xFFFFFFFF);
+        view.setTextSize(size);
+        return view;
+    }
+
     private void togglePanel() {
         if (panel != null) {
-            manager.removeView(panel); panel = null; return;
+            manager.removeView(panel);
+            panel = null;
+            return;
         }
+
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(28, 24, 28, 24);
-        box.setBackgroundColor(0xFF202A24);
+        box.setPadding(22, 20, 22, 18);
+        box.setBackgroundColor(0xFF17251D);
 
-        TextView heading = new TextView(this);
-        heading.setText("🤖 Green — seu robô");
-        heading.setTextColor(0xFFFFFFFF);
-        heading.setTextSize(20);
+        TextView heading = text("🤖 Green", 22);
         box.addView(heading);
+        conversation = text(lastMessage, 15);
+        conversation.setPadding(0, 14, 0, 14);
+        box.addView(conversation);
 
-        TextView info = new TextView(this);
-        info.setText("Posso falar mensagens que você compartilhar comigo. Toque em um botão abaixo.");
-        info.setTextColor(0xFFE7F5EA);
-        info.setTextSize(14);
-        info.setPadding(0, 14, 0, 18);
-        box.addView(info);
+        commandInput = new EditText(this);
+        commandInput.setSingleLine(false);
+        commandInput.setMinLines(1);
+        commandInput.setMaxLines(3);
+        commandInput.setTextSize(16);
+        commandInput.setHint("Digite o que quer que eu faça...");
+        commandInput.setHintTextColor(0xFFB7C9BC);
+        commandInput.setTextColor(0xFFFFFFFF);
+        commandInput.setPadding(12, 8, 12, 8);
+        commandInput.setBackgroundColor(0xFF304438);
+        box.addView(commandInput);
 
-        addAction(box, "🔊 Falar novamente", () -> speak(lastMessage));
-        addAction(box, "⚙ Abrir configurações", () -> openSettings());
-        addAction(box, "Ocultar robô", () -> {
+        Button send = new Button(this);
+        send.setText("Enviar comando");
+        box.addView(send);
+        send.setOnClickListener(v -> {
+            String value = commandInput.getText().toString().trim();
+            if (!value.isEmpty()) {
+                ((InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE))
+                        .hideSoftInputFromWindow(commandInput.getWindowToken(), 0);
+                handleCommand(value);
+                commandInput.setText("");
+            }
+        });
+
+        Button repeat = new Button(this);
+        repeat.setText("🔊 Repetir fala");
+        box.addView(repeat);
+        repeat.setOnClickListener(v -> speak(lastMessage));
+
+        Button hide = new Button(this);
+        hide.setText("Ocultar robô");
+        box.addView(hide);
+        hide.setOnClickListener(v -> {
             if (panel != null) { manager.removeView(panel); panel = null; }
             if (bubble != null) { manager.removeView(bubble); bubble = null; }
             stopSelf();
         });
 
         WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                300, WindowManager.LayoutParams.WRAP_CONTENT, overlayType(),
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
+                310, WindowManager.LayoutParams.WRAP_CONTENT, overlayType(),
+                WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE,
+                PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
-        params.y = 100;
+        params.y = 80;
         panel = box;
         manager.addView(panel, params);
+        commandInput.requestFocus();
     }
 
-    private void addAction(LinearLayout box, String label, Runnable action) {
-        TextView item = new TextView(this);
-        item.setText(label);
-        item.setTextColor(0xFF8BE0A8);
-        item.setTextSize(16);
-        item.setPadding(0, 12, 0, 12);
-        box.addView(item);
-        item.setOnClickListener(v -> action.run());
+    private void handleCommand(String original) {
+        String command = original.trim().toLowerCase(new Locale("pt", "BR"));
+        if (command.equals("abrir configurações") || command.equals("abre configurações")
+                || command.equals("configurações") || command.equals("abrir ajustes")) {
+            openSettings();
+        } else if (command.contains("abrir navegador") || command.contains("abre navegador")
+                || command.contains("abrir google") || command.contains("abre o google")) {
+            openUrl("https://www.google.com", "Abrindo o Google.");
+        } else if (command.startsWith("abrir site ")) {
+            String address = original.substring("abrir site ".length()).trim();
+            if (!address.startsWith("http://") && !address.startsWith("https://")) address = "https://" + address;
+            openUrl(address, "Abrindo o site.");
+        } else if (command.startsWith("fale ") || command.startsWith("fala ")) {
+            speak(original.substring(original.indexOf(' ') + 1));
+        } else if (command.contains("ocultar robô") || command.contains("esconder robô")) {
+            speak("Vou me esconder. Até já.");
+            if (panel != null) { manager.removeView(panel); panel = null; }
+            if (bubble != null) { manager.removeView(bubble); bubble = null; }
+            stopSelf();
+        } else {
+            speak("Recebi seu pedido: " + original + ". Ainda não tenho conexão com uma inteligência artificial para entender e executar qualquer tarefa. Posso abrir configurações, abrir o Google ou falar um texto.");
+        }
     }
 
     private void openSettings() {
@@ -150,44 +206,42 @@ public class FloatingService extends Service implements TextToSpeech.OnInitListe
             Intent i = new Intent(Settings.ACTION_SETTINGS);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
-            speak("Abrindo as configurações.");
-        } catch (Exception e) {
-            speak("Não consegui abrir as configurações.");
-        }
+            speak("Abrindo as configurações do celular.");
+        } catch (Exception e) { speak("Não consegui abrir as configurações."); }
+    }
+
+    private void openUrl(String url, String response) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            speak(response);
+        } catch (Exception e) { speak("Não consegui abrir esse endereço."); }
     }
 
     private void handleSharedText(String text) {
-        String command = text.trim().toLowerCase(new Locale("pt", "BR"));
-        if (command.contains("abrir configurações") || command.contains("abre configurações")
-                || command.equals("configurações")) {
+        speak("Mensagem recebida: " + text);
+        String c = text.toLowerCase(new Locale("pt", "BR"));
+        if (c.contains("abrir configurações") || c.contains("abre configurações")) {
             openSettings();
-        } else if (command.contains("abrir navegador") || command.contains("abre o navegador")) {
-            try {
-                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"));
-                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(i);
-                speak("Abrindo o navegador.");
-            } catch (Exception e) { speak("Não consegui abrir o navegador."); }
-        } else {
-            speak("Recebi sua mensagem. Vou ler para você: " + text);
+        } else if (c.contains("abrir navegador") || c.contains("abre o google")) {
+            openUrl("https://www.google.com", "Abrindo o Google.");
         }
     }
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && intent.hasExtra(EXTRA_SHARED_TEXT)) {
-            String text = intent.getStringExtra(EXTRA_SHARED_TEXT);
-            if (text != null && !text.trim().isEmpty()) handleSharedText(text);
+            String shared = intent.getStringExtra(EXTRA_SHARED_TEXT);
+            if (shared != null && !shared.trim().isEmpty()) handleSharedText(shared);
         }
         return START_STICKY;
     }
 
-    @Override
-    public void onDestroy() {
+    @Override public void onDestroy() {
         if (panel != null) manager.removeView(panel);
         if (bubble != null) manager.removeView(bubble);
         if (tts != null) { tts.stop(); tts.shutdown(); }
-        panel = null; bubble = null;
+        panel = null; bubble = null; conversation = null; commandInput = null;
         super.onDestroy();
     }
 
