@@ -52,11 +52,7 @@ public class MainActivity extends Activity {
 
     private void startFloatingService() {
         Intent service = new Intent(this, FloatingService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(service);
-        } else {
-            startService(service);
-        }
+        startService(service);
         finish();
     }
 
